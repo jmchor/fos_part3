@@ -1,5 +1,21 @@
 const express = require('express');
 const app = express();
+const morgan = require('morgan');
+const customMorganFunction = morgan((tokens, req, res) => {
+	return [
+		tokens.method(req, res),
+		tokens.url(req, res),
+		tokens.status(req, res),
+		tokens.res(req, res, 'content-length'),
+		'-',
+		req.method === 'POST' ? JSON.stringify(req.body) : '-',
+		tokens['response-time'](req, res),
+		'ms',
+	].join(' ');
+});
+
+app.use(customMorganFunction);
+
 app.use(express.json());
 
 let persons = [
