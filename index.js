@@ -21,10 +21,8 @@ const Person = require('./models/person');
 app.use(cors());
 
 app.use(express.static('dist'));
-
-app.use(customMorganFunction);
-
 app.use(express.json());
+app.use(customMorganFunction);
 
 // let persons = [
 // 	{
@@ -50,9 +48,11 @@ app.use(express.json());
 // ];
 
 app.get('/api/persons', (req, res, next) => {
-	Person.find({}).then((persons) => {
-		res.json(persons);
-	});
+	Person.find({})
+		.then((persons) => {
+			res.json(persons);
+		})
+		.catch((error) => next(error));
 });
 
 app.get('/api/info', (req, res, next) => {
@@ -60,8 +60,18 @@ app.get('/api/info', (req, res, next) => {
 	const requestDate = new Date().toDateString();
 	const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-	const message = `Phonebook has info for ${persons.length} people. <br/> </br> ${requestDate}${requestTime} ${timezone}`;
-	res.send(message);
+	let allPersons = [];
+
+	Person.find({})
+		.then((persons) => {
+			allPersons = persons;
+			const message = `Phonebook has info for ${allPersons?.length} people. <br/> </br> ${requestDate}${requestTime} ${timezone}`;
+			res.send(message);
+		})
+		.catch((error) => {
+			next(error);
+			console.error('Error:', error.message);
+		});
 });
 
 app.get('/api/persons/:id', (req, res, next) => {
@@ -76,6 +86,7 @@ app.get('/api/persons/:id', (req, res, next) => {
 			}
 		})
 		.catch((error) => {
+			next(error);
 			console.error('Error:', error.message);
 			res.status(500).json({ error: 'Internal server error.' }).end();
 		});
@@ -84,7 +95,9 @@ app.get('/api/persons/:id', (req, res, next) => {
 app.delete('/api/persons/:id', (req, res) => {
 	const { id } = req.params;
 
-	Person.findByIdAndDelete(id).then(console.log('Person deleted from DB'));
+	Person.findByIdAndDelete(id)
+		.then(console.log('Person deleted from DB'))
+		.catch((error) => next(error));
 
 	res.status(204).end();
 });
@@ -97,19 +110,42 @@ app.post('/api/persons', (req, res, next) => {
 		res.status(400).json({ error: 'Either name or number are missing.' }).end();
 	}
 
-	Person.findOne({ name: name }).then((foundPerson) => {
-		if (foundPerson) {
-			return res.status(400).json({ error: 'The name must be unique.' }).end();
-		} else {
-			const newPerson = new Person({
-				name: name,
-				number: number,
-			});
-
-			return newPerson.save().then((savedNewPerson) => res.json(savedNewPerson));
-		}
+	const newPerson = new Person({
+		name: name,
+		number: number,
 	});
+
+	return newPerson.save().then((savedNewPerson) => res.json(savedNewPerson));
 });
+
+app.put('/api/persons/:id', (req, res, next) => {
+	const { id } = req.params;
+	const { number, name } = req.body;
+
+	console.log(id, number, name);
+
+	Person.findByIdAndUpdate(id, { number, name }, { new: true })
+		.then((updatedPerson) => res.json(updatedPerson))
+		.catch((error) => next(error));
+});
+
+const unknownEndpoint = (request, response) => {
+	response.status(404).send({ error: 'unknown endpoint' });
+};
+
+app.use(unknownEndpoint);
+
+const errorHandler = (error, request, response, next) => {
+	console.error(error.message);
+
+	if (error.name === 'CastError') {
+		return response.status(400).send({ error: 'malformatted id' });
+	}
+
+	next(error);
+};
+
+app.use(errorHandler);
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT);
