@@ -92,7 +92,7 @@ app.get('/api/persons/:id', (req, res, next) => {
 		});
 });
 
-app.delete('/api/persons/:id', (req, res) => {
+app.delete('/api/persons/:id', (req, res, next) => {
 	const { id } = req.params;
 
 	Person.findByIdAndDelete(id)
@@ -103,11 +103,10 @@ app.delete('/api/persons/:id', (req, res) => {
 });
 
 app.post('/api/persons', (req, res, next) => {
-	const { name, number } = req.body; //need  the json parser for this to work
-	// const id = Math.floor(Math.random() * 1000000) + persons.length;
+	const { name, number } = req.body;
 
 	if (!name || !number) {
-		res.status(400).json({ error: 'Either name or number are missing.' }).end();
+		return res.status(400).json({ error: 'Both name and number are required.' }).end();
 	}
 
 	const newPerson = new Person({
@@ -115,7 +114,10 @@ app.post('/api/persons', (req, res, next) => {
 		number: number,
 	});
 
-	return newPerson.save().then((savedNewPerson) => res.json(savedNewPerson));
+	return newPerson
+		.save()
+		.then((savedNewPerson) => res.status(201).json(savedNewPerson)) // 201 Created status code
+		.catch((error) => next(error));
 });
 
 app.put('/api/persons/:id', (req, res, next) => {
@@ -124,7 +126,7 @@ app.put('/api/persons/:id', (req, res, next) => {
 
 	console.log(id, number, name);
 
-	Person.findByIdAndUpdate(id, { number, name }, { new: true })
+	Person.findByIdAndUpdate(id, { number, name }, { new: true, runValidators: true, context: 'query' })
 		.then((updatedPerson) => res.json(updatedPerson))
 		.catch((error) => next(error));
 });
@@ -140,6 +142,8 @@ const errorHandler = (error, request, response, next) => {
 
 	if (error.name === 'CastError') {
 		return response.status(400).send({ error: 'malformatted id' });
+	} else if (error.name === 'ValidationError') {
+		return response.status(400).json({ error: error.message });
 	}
 
 	next(error);
